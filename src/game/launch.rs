@@ -89,10 +89,16 @@ pub async fn start_game(
         .iter()
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
-    let cwd = match &resolved.fields.cwd {
-        Some(cwd) => Some(config.resolve_path(resolved.templated(cwd, Some(username))?)),
-        None => None,
-    };
+    // Always set an explicit cwd (defaulting to server_path rather than
+    // inheriting the webtiles-rs process's own launch directory), so
+    // crawl's own on-disk state (its `cache.*` dir, milestones, etc, for
+    // whichever of those aren't covered by an explicit rc/save/morgue
+    // path) lands under server_path regardless of where the server was
+    // started from.
+    let cwd = Some(match &resolved.fields.cwd {
+        Some(cwd) => config.resolve_path(resolved.templated(cwd, Some(username))?),
+        None => config.server_path.clone(),
+    });
 
     let (term_cols, term_rows) = config.recording_term_size;
     let spawn_args = ProcessSpawnArgs {
