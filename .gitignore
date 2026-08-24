@@ -1,0 +1,9 @@
+/target/
+/cache*
+/crash--*.txt
+/*.cs
+/milestones
+/prefs/
+/*.db3
+/config.yml
+/games.d/
