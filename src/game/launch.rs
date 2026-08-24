@@ -51,10 +51,10 @@ pub async fn start_game(
         .clone()
         .ok_or_else(|| WebtilesError::Game(format!("game {game_id} has no crawl_binary configured")))?;
 
-    let rcfile_dir = templated_path(&resolved, "rcfile_path", username)?;
-    let macro_dir = templated_path(&resolved, "macro_path", username)?;
-    let morgue_dir = templated_path(&resolved, "morgue_path", username)?;
-    let socket_dir = templated_path(&resolved, "socket_path", username)?;
+    let rcfile_dir = templated_path(config, &resolved, "rcfile_path", username)?;
+    let macro_dir = templated_path(config, &resolved, "macro_path", username)?;
+    let morgue_dir = templated_path(config, &resolved, "morgue_path", username)?;
+    let socket_dir = templated_path(config, &resolved, "socket_path", username)?;
 
     for dir in [&rcfile_dir, &macro_dir, &morgue_dir, &socket_dir] {
         tokio::fs::create_dir_all(dir).await?;
@@ -75,8 +75,9 @@ pub async fn start_game(
     argv.push(morgue_dir.to_string_lossy().to_string());
     argv.extend(resolved.fields.options.iter().cloned());
     if let Some(dir_path) = &resolved.fields.dir_path {
+        let dir_path = config.resolve_path(resolved.templated(dir_path, Some(username))?);
         argv.push("-dir".to_string());
-        argv.push(resolved.templated(dir_path, Some(username))?);
+        argv.push(dir_path.to_string_lossy().to_string());
     }
     argv.push("-webtiles-socket".to_string());
     argv.push(process_socket_path.to_string_lossy().to_string());
@@ -89,7 +90,7 @@ pub async fn start_game(
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
     let cwd = match &resolved.fields.cwd {
-        Some(cwd) => Some(PathBuf::from(resolved.templated(cwd, Some(username))?)),
+        Some(cwd) => Some(config.resolve_path(resolved.templated(cwd, Some(username))?)),
         None => None,
     };
 
@@ -117,7 +118,7 @@ pub async fn start_game(
         .expect("pty_reader is only taken once, immediately after spawn");
     tokio::spawn(drain_pty_output(pty_reader));
 
-    wait_for_socket(&process_socket_path).await?;
+    wait_for_socket(&mut terminal_process, &process_socket_path).await?;
 
     let own_socket_dir = config
         .server_socket_path
@@ -134,7 +135,8 @@ pub async fn start_game(
     // `client_path` socket message, which real builds may never send -
     // see `handle_process_message`'s fallback below).
     if let Some(client_path) = &resolved.fields.client_path {
-        let client_path = resolved.templated(client_path, Some(username))?;
+        let client_path = config.resolve_path(resolved.templated(client_path, Some(username))?);
+        let client_path = client_path.to_string_lossy();
         if let Err(e) = register_client_html(&session, &game_data, &client_path, None).await {
             tracing::warn!(game_id = session.id, error = %e, "failed to render game.html from configured client_path");
         }
@@ -182,7 +184,12 @@ async fn drain_pty_output(mut reader: impl tokio::io::AsyncRead + Unpin) {
     }
 }
 
-fn templated_path(resolved: &ResolvedGame, field: &str, username: &str) -> Result<PathBuf> {
+fn templated_path(
+    config: &crate::config::ServerConfig,
+    resolved: &ResolvedGame,
+    field: &str,
+    username: &str,
+) -> Result<PathBuf> {
     let value = match field {
         "rcfile_path" => resolved.fields.rcfile_path.as_deref(),
         "macro_path" => resolved.fields.macro_path.as_deref(),
@@ -191,20 +198,48 @@ fn templated_path(resolved: &ResolvedGame, field: &str, username: &str) -> Resul
         _ => None,
     }
     .ok_or_else(|| WebtilesError::Config(format!("game is missing required field `{field}`")))?;
-    Ok(PathBuf::from(resolved.templated(value, Some(username))?))
+    Ok(config.resolve_path(resolved.templated(value, Some(username))?))
 }
 
-async fn wait_for_socket(path: &std::path::Path) -> Result<()> {
+async fn wait_for_socket(process: &mut TerminalProcess, path: &std::path::Path) -> Result<()> {
     let start = tokio::time::Instant::now();
     while !path.exists() {
         if start.elapsed() > SOCKET_APPEAR_TIMEOUT {
-            return Err(WebtilesError::Process(
-                "timed out waiting for the game process to create its webtiles socket".to_string(),
-            ));
+            let _ = process.send_sigabrt();
+            return Err(WebtilesError::Process(format!(
+                "timed out waiting for the game process to create its webtiles socket{}",
+                stderr_suffix(process)
+            )));
         }
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_millis(50)) => {}
+            status = process.wait() => {
+                let status = status.map(|s| s.to_string()).unwrap_or_else(|e| e.to_string());
+                return Err(WebtilesError::Process(format!(
+                    "game process exited ({status}) before creating its webtiles socket{}",
+                    stderr_suffix(process)
+                )));
+            }
+        }
     }
     Ok(())
+}
+
+/// Drain whatever the child has written to stderr so far, for inclusion
+/// in an error message - otherwise a crash reason (missing data files,
+/// bad `-rc`, etc.) is silently lost and only a generic timeout is seen.
+fn stderr_suffix(process: &mut TerminalProcess) -> String {
+    let mut lines = Vec::new();
+    while let Ok(line) = process.output_rx.try_recv() {
+        if let process::ProcessOutputLine::Stderr(text) = line {
+            lines.push(text);
+        }
+    }
+    if lines.is_empty() {
+        String::new()
+    } else {
+        format!(": {}", lines.join(" / "))
+    }
 }
 
 fn format_timestamp() -> String {

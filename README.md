@@ -1,7 +1,7 @@
 # webtiles-rs
 
 A Rust (Axum + Tokio) rewrite of the DCSS WebTiles server, protocol-compatible
-with the Python implementation at `../webserver`. See:
+with the official Python implementation. See:
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) - component-by-component mapping to
   the Python implementation, with citations.
@@ -31,7 +31,7 @@ directory - matching Python's `os.path.dirname(os.path.abspath(__file__))`
 default), so it can usually be run from anywhere with no flags:
 
 ```sh
-./crawl-ref/source/webserver-rs/target/release/webtiles-rs --port 8080
+./webserver-rs/target/release/webtiles-rs --port 8080
 ```
 
 Use `--server-path` to point at a different directory explicitly:
@@ -39,6 +39,22 @@ Use `--server-path` to point at a different directory explicitly:
 ```sh
 ./webtiles-rs --server-path /path/to/webserver --port 8080
 ```
+
+### What needs to be under `--server-path`
+
+Relative paths in `config.yml`/`games.d` are resolved against
+`--server-path` itself (not the process's current working directory), so
+a self-contained server directory typically looks like:
+
+| Path | Purpose |
+|---|---|
+| `config.yml`, `games.d/*.yml` | Server and game configuration. |
+| `passwd.db3`, `user_settings.db3` | Account/settings databases - created automatically on first run if missing. |
+| `crawl` (or whatever `crawl_binary` names) | The compiled DCSS webtiles binary. |
+| `dat/` | DCSS game data files - copy from your crawl checkout's `crawl-ref/source/dat/`. Crawl looks for this next to its own binary and exits immediately with "Missing DCSS data directory" if it's absent. |
+| `docs/`, `settings/` | Also looked up next to the `crawl` binary; `settings/` (containing `init.txt` etc.) is needed for a working default ruleset. |
+| `webserver/game_data/` (or whatever `client_path` names) | The compiled webtiles client (`static/` + `templates/game.html`) - copy from your crawl checkout's `crawl-ref/source/webserver/game_data/`. Without it, starting a game fails with "failed to read template game.html". |
+| `rcs/` (or whatever `rcfile_path`/`macro_path`/`morgue_path`/`socket_path` name) | Per-user rc/macro files, morgues, and the sockets used to talk to running game processes - created automatically. |
 
 ### Command-line options
 

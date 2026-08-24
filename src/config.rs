@@ -294,7 +294,27 @@ impl ServerConfig {
             config.load_games_dir(&games_dir)?;
         }
 
+        // Unlike Python (which relies on the operator's CWD matching
+        // `server_path` by convention), relative paths from config.yml are
+        // resolved against `server_path` itself, so the server behaves the
+        // same regardless of the CWD it's launched from.
+        config.password_db = config.resolve_path(config.password_db.clone());
+        config.settings_db = config.resolve_path(config.settings_db.clone());
+        config.ssl_cert_file = config.ssl_cert_file.clone().map(|p| config.resolve_path(p));
+        config.ssl_key_file = config.ssl_key_file.clone().map(|p| config.resolve_path(p));
+
         Ok(config)
+    }
+
+    /// Resolve a possibly-relative on-disk path against `server_path`.
+    /// Absolute paths are returned unchanged.
+    pub fn resolve_path(&self, path: impl AsRef<Path>) -> PathBuf {
+        let path = path.as_ref();
+        if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            self.server_path.join(path)
+        }
     }
 
     /// Merge a YAML document's top-level keys over the current config.
@@ -414,6 +434,9 @@ impl ServerConfig {
         let mut merged = GameFields::default();
         for f in chain.into_iter().rev() {
             merge_game_fields(&mut merged, f);
+        }
+        if let Some(crawl_binary) = merged.crawl_binary.clone() {
+            merged.crawl_binary = Some(self.resolve_path(crawl_binary));
         }
         ResolvedGame { id, fields: merged }
     }

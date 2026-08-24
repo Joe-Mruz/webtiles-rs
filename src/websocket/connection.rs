@@ -2,13 +2,13 @@
 //! <-> game/lobby logic. See `../ARCHITECTURE.md` §3 for the layering this
 //! implements and `PROTOCOL.md` for the exact message catalog.
 //!
-//! Scope note: this implements the core connect/login/lobby/play/watch/
-//! chat/disconnect flows end-to-end (validated against the real `crawl`
-//! binary for the process-management half in
+//! Scope note: this implements the core connect/login/register/lobby/play/
+//! watch/chat/disconnect flows end-to-end (validated against the real
+//! `crawl` binary for the process-management half in
 //! `tests/real_crawl_handshake.rs`). Several Python features are not yet
-//! ported here - see the `NOT YET PORTED` markers - registration/password
-//! reset email flows, RC file editing, admin commands, save-slot info,
-//! and reconnection via `watch_socket_dirs`.
+//! ported here - see the `NOT YET PORTED` markers - password reset email
+//! flows, RC file editing, admin commands, save-slot info, and
+//! reconnection via `watch_socket_dirs`.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -182,8 +182,10 @@ async fn handle_known_message(conn: &mut Connection, message: KnownClientMessage
         KnownClientMessage::Watch { username } => watch(conn, &username).await,
         KnownClientMessage::GoLobby => go_lobby(conn).await,
         KnownClientMessage::ChatMsg { text } => chat(conn, &text).await,
-        // NOT YET PORTED: register/rc-editing/admin/password-reset - see
-        // module doc.
+        KnownClientMessage::Register { username, password, email } => {
+            register(conn, &username, &password, &email).await
+        }
+        // NOT YET PORTED: rc-editing/admin/password-reset - see module doc.
         _ => {
             tracing::debug!(connection_id = conn.id, "message type not yet implemented");
         }
@@ -210,6 +212,33 @@ async fn login(conn: &mut Connection, username: &str, password: &str) {
         }
         _ => {
             conn.batcher.queue(&ServerMessage::LoginFail { reason: None }).ok();
+        }
+    }
+}
+
+/// Matches `ws_handler.register`: create the account then, on success, log
+/// the new user in exactly like a normal login (Python's `do_login`).
+async fn register(conn: &mut Connection, username: &str, password: &str, email: &str) {
+    let email = if email.is_empty() { None } else { Some(email) };
+    match conn.state.users.register_user(username, password, email).await {
+        Ok(Ok(())) => {
+            conn.username = Some(username.to_string());
+            conn.batcher
+                .queue(&ServerMessage::LoginSuccess {
+                    username: username.to_string(),
+                    admin: conn.is_admin,
+                })
+                .ok();
+            send_game_links(conn).await;
+        }
+        Ok(Err(reason)) => {
+            conn.batcher.queue(&ServerMessage::RegisterFail { reason }).ok();
+        }
+        Err(e) => {
+            tracing::warn!(connection_id = conn.id, error = %e, "registration failed");
+            conn.batcher
+                .queue(&ServerMessage::RegisterFail { reason: "Registration failed.".to_string() })
+                .ok();
         }
     }
 }
