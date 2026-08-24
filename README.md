@@ -12,7 +12,7 @@ with the official Python implementation. See:
 ## Building
 
 ```sh
-cd crawl-ref/source/webserver-rs
+cd webtiles-rs
 cargo build --release
 ```
 
@@ -31,7 +31,7 @@ directory - matching Python's `os.path.dirname(os.path.abspath(__file__))`
 default), so it can usually be run from anywhere with no flags:
 
 ```sh
-./webserver-rs/target/release/webtiles-rs --port 8080
+./webtiles-rs/target/release/webtiles-rs --port 8080
 ```
 
 Use `--server-path` to point at a different directory explicitly:
