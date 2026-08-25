@@ -9,7 +9,13 @@ pub fn GameLinks(games: Vec<(String, String)>) -> impl IntoView {
         "Play now:"
         {games
             .into_iter()
-            .map(|(id, name)| view! { <br/> <a href=format!("#play-{id}")>{name}</a> })
+            .map(|(id, name)| view! {
+                <br/>
+                <a href=format!("#play-{id}")>{name}</a>
+                " ("
+                <a class="edit_rc_link" data-game_id=id.clone()>"edit rc"</a>
+                ")"
+            })
             .collect_view()}
     }
 }

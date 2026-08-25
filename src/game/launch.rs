@@ -190,7 +190,7 @@ async fn drain_pty_output(mut reader: impl tokio::io::AsyncRead + Unpin) {
     }
 }
 
-fn templated_path(
+pub(crate) fn templated_path(
     config: &crate::config::ServerConfig,
     resolved: &ResolvedGame,
     field: &str,
@@ -205,6 +205,18 @@ fn templated_path(
     }
     .ok_or_else(|| WebtilesError::Config(format!("game is missing required field `{field}`")))?;
     Ok(config.resolve_path(resolved.templated(value, Some(username))?))
+}
+
+/// The on-disk path of `username`'s rc file for `resolved`, matching the
+/// `-rc` argv convention above. Used both to launch a game and to serve
+/// `get_rc`/`set_rc` (see `websocket::connection`).
+pub(crate) fn rc_file_path(
+    config: &crate::config::ServerConfig,
+    resolved: &ResolvedGame,
+    username: &str,
+) -> Result<PathBuf> {
+    let rcfile_dir = templated_path(config, resolved, "rcfile_path", username)?;
+    Ok(rcfile_dir.join(format!("{username}.rc")))
 }
 
 async fn wait_for_socket(process: &mut TerminalProcess, path: &std::path::Path) -> Result<()> {

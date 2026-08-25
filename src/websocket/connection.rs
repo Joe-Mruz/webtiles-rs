@@ -3,12 +3,12 @@
 //! implements and `PROTOCOL.md` for the exact message catalog.
 //!
 //! Scope note: this implements the core connect/login/register/lobby/play/
-//! watch/chat/disconnect flows end-to-end (validated against the real
-//! `crawl` binary for the process-management half in
+//! watch/chat/rc-editing/disconnect flows end-to-end (validated against
+//! the real `crawl` binary for the process-management half in
 //! `tests/real_crawl_handshake.rs`). Several Python features are not yet
 //! ported here - see the `NOT YET PORTED` markers - password reset email
-//! flows, RC file editing, admin commands, save-slot info, and
-//! reconnection via `watch_socket_dirs`.
+//! flows, admin commands, save-slot info, and reconnection via
+//! `watch_socket_dirs`.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -187,10 +187,47 @@ async fn handle_known_message(conn: &mut Connection, message: KnownClientMessage
         KnownClientMessage::Register { username, password, email } => {
             register(conn, &username, &password, &email).await
         }
-        // NOT YET PORTED: rc-editing/admin/password-reset - see module doc.
+        KnownClientMessage::GetRc { game_id } => get_rc(conn, &game_id).await,
+        KnownClientMessage::SetRc { game_id, contents } => set_rc(conn, &game_id, &contents).await,
+        // NOT YET PORTED: admin/password-reset - see module doc.
         _ => {
             tracing::debug!(connection_id = conn.id, "message type not yet implemented");
         }
+    }
+}
+
+/// `get_rc`: read the logged-in user's rc file for `game_id` and send it
+/// back as `rcfile_contents`, matching `ws_handler.get_rc`. A missing rc
+/// file (new player) is reported as empty contents rather than an error,
+/// matching Python's `IOError` → `""` fallback.
+async fn get_rc(conn: &mut Connection, game_id: &str) {
+    let Some(username) = conn.username.clone() else { return };
+    let Some(resolved) = conn.state.config.resolve_game(game_id) else { return };
+    let Ok(rc_path) = crate::game::launch::rc_file_path(&conn.state.config, &resolved, &username) else {
+        return;
+    };
+    let contents = tokio::fs::read_to_string(&rc_path).await.unwrap_or_default();
+    conn.batcher
+        .queue(&ServerMessage::RcfileContents { game_id: game_id.to_string(), contents })
+        .ok();
+}
+
+/// `set_rc`: overwrite the logged-in user's rc file for `game_id`,
+/// matching `ws_handler.set_rc`.
+async fn set_rc(conn: &mut Connection, game_id: &str, contents: &str) {
+    let Some(username) = conn.username.clone() else { return };
+    let Some(resolved) = conn.state.config.resolve_game(game_id) else { return };
+    let Ok(rc_path) = crate::game::launch::rc_file_path(&conn.state.config, &resolved, &username) else {
+        return;
+    };
+    if let Some(parent) = rc_path.parent() {
+        if let Err(e) = tokio::fs::create_dir_all(parent).await {
+            tracing::warn!(connection_id = conn.id, %game_id, error = %e, "set_rc: failed to create rcfile_path directory");
+            return;
+        }
+    }
+    if let Err(e) = tokio::fs::write(&rc_path, contents).await {
+        tracing::warn!(connection_id = conn.id, %game_id, error = %e, "set_rc: failed to write rc file");
     }
 }
 

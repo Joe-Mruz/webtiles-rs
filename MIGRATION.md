@@ -68,8 +68,8 @@ binary):
   previous process for a username crashed/left a lock file, `play` does
   not detect or clean that up before starting a new one.
 - Password change/reset (including email sending), admin commands
-  (`admin_announce`, `admin_pw_reset`, etc.), RC file editing over the
-  websocket. (Login and registration are implemented.)
+  (`admin_announce`, `admin_pw_reset`, etc.). (Login, registration, and
+  RC file editing are implemented.)
 - `-no-player-bones` / account-hold restrictions on newly started games.
 - ttyrec recording during `play` (the plumbing exists in
   `game::process`, just not wired into `game::launch::start_game` yet).
@@ -80,8 +80,7 @@ binary):
 ## Recommended path to production readiness
 
 1. Add ttyrec recording and stale-lock/crash recovery to `game::launch`.
-2. Port the remaining message handlers (registration, password flows, RC
-   editing, admin commands).
+2. Port the remaining message handlers (password flows, admin commands).
 3. Run both servers side-by-side against a shared `passwd.db3`/game
    config during a beta period; compare behavior using real DCSS clients.
 4. Add the compatibility-test corpus described in the original task brief

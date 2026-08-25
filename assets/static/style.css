@@ -152,6 +152,19 @@ body {
     padding-top: 10px;
 }
 
+/* has no href (click is handled in JS), so it doesn't match `a:link`
+   below and needs its link-like styling spelled out explicitly. */
+.edit_rc_link {
+    color: white;
+    font-weight: bold;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.edit_rc_link:hover {
+    color: lightgrey;
+}
+
 #admin_panel {
     border: 1px solid lightgray;
     padding: 10px;
