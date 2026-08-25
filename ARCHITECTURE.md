@@ -386,6 +386,11 @@ webserver-rs/
 ├── README.md            (build/run/config instructions)
 ├── Cargo.toml
 ├── config.yml.example
+├── assets/
+│   └── static/          (embedded lobby CSS/fonts/JS - see http/assets.rs;
+│                         `scripts/{comm,client,chat,key_conversion,app,
+│                         linkify}.js` + `scripts/contrib/*` are untouched,
+│                         see §2)
 ├── src/
 │   ├── main.rs
 │   ├── lib.rs
@@ -397,11 +402,18 @@ webserver-rs/
 │   ├── http/
 │   │   ├── mod.rs
 │   │   ├── handlers.rs
-│   │   └── game_data.rs
+│   │   ├── assets.rs      (embedded `/static/*`, via rust_embed)
+│   │   ├── game_data.rs   (per-version external game asset registry/serving)
+│   │   ├── templates.rs   (template engine - now only for external `game.html`)
+│   │   └── ui/            (Leptos SSR components for the lobby chrome, see §2)
+│   │       ├── mod.rs
+│   │       ├── lobby.rs
+│   │       ├── banner.rs
+│   │       ├── game_links.rs
+│   │       └── chat_line.rs
 │   ├── websocket/
-│   │   ├── mod.rs
-│   │   ├── connection.rs
-│   │   └── compression.rs
+│   │   ├── mod.rs         (Axum upgrade handler)
+│   │   └── connection.rs  (per-connection protocol/game logic)
 │   ├── protocol/
 │   │   ├── mod.rs
 │   │   ├── client.rs      (typed client->server messages)
@@ -411,9 +423,14 @@ webserver-rs/
 │       ├── mod.rs
 │       ├── manager.rs     (game registry, lobby fan-out)
 │       ├── session.rs     (per-game state: watchers, chat, blocklist)
+│       ├── launch.rs      (spawn -> attach -> forward -> exit lifecycle)
 │       ├── process.rs     (PTY spawn, ttyrec, exit handling)
 │       └── socket.rs      (Unix datagram protocol to the DCSS process)
 └── tests/
-    ├── codec.rs
-    └── http.rs
+    ├── diagnose_env.rs
+    ├── http_integration.rs
+    ├── https.rs
+    ├── play_flow.rs
+    ├── process_smoke.rs
+    └── real_crawl_handshake.rs
 ```

@@ -22,13 +22,17 @@ C compiler/linker are required (SQLite is vendored via `rusqlite`'s
 
 ## Running
 
-The server needs the same on-disk layout as the Python server: a
-`config.yml`/`games.d/` directory, a `passwd.db3`/`user_settings.db3`,
-template files, and static assets. By default it looks for a `webserver/`
-directory next to the `webserver-rs` checkout it was built from
-(resolved relative to the binary's own location, not the current working
-directory - matching Python's `os.path.dirname(os.path.abspath(__file__))`
-default), so it can usually be run from anywhere with no flags:
+The server needs the same on-disk layout as the Python server for
+configuration, accounts, and the DCSS binary/game data - a `config.yml`/
+`games.d/` directory, `passwd.db3`/`user_settings.db3`, and (per game) the
+crawl binary and its `webserver/game_data/` client assets. It does *not*
+need any lobby template/static files on disk: our own lobby page and its
+CSS/JS are compiled into the binary (see `ARCHITECTURE.md` §2). By default
+it looks for a `webserver/` directory next to the `webserver-rs` checkout
+it was built from (resolved relative to the binary's own location, not the
+current working directory - matching Python's
+`os.path.dirname(os.path.abspath(__file__))` default), so it can usually
+be run from anywhere with no flags:
 
 ```sh
 ./webtiles-rs/target/release/webtiles-rs --port 8080
@@ -62,7 +66,7 @@ a self-contained server directory typically looks like:
 |---|---|
 | `--server-path <dir>` | Directory containing `config.yml`/`games.d/`. Defaults to `webserver/` next to the `webserver-rs` checkout (see above); the server logs the resolved path and game count at startup, and warns if no games were found. |
 | `-p, --port <port>` | Bind an HTTP port, disabling SSL (matches `webtiles/server.py`'s `-p`). |
-| `--ssl-port <port>` | Bind an SSL port (SSL/TLS is not yet implemented - see `MIGRATION.md`). |
+| `--ssl-port <port>` | Bind an SSL port (HTTPS/WSS via `axum-server` + `rustls`; requires `ssl_cert_file`/`ssl_key_file` in `config.yml` - see `ARCHITECTURE.md` §2 and `MIGRATION.md`). |
 | `--logfile <path>` | Reserved for parity with the Python CLI; logging is currently controlled by `RUST_LOG` (see below). |
 | `--daemon` / `--no-daemon` | Reserved; daemonization is not yet implemented. |
 | `--no-pidfile` | Reserved; pidfile handling is not yet implemented. |

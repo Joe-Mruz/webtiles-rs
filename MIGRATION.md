@@ -67,9 +67,9 @@ binary):
 - **Stale-lock purge and crash recovery** (`ARCHITECTURE.md` §4.3): if a
   previous process for a username crashed/left a lock file, `play` does
   not detect or clean that up before starting a new one.
-- Registration, password change/reset (including email sending), admin
-  commands (`admin_announce`, `admin_pw_reset`, etc.), RC file
-  editing over the websocket.
+- Password change/reset (including email sending), admin commands
+  (`admin_announce`, `admin_pw_reset`, etc.), RC file editing over the
+  websocket. (Login and registration are implemented.)
 - `-no-player-bones` / account-hold restrictions on newly started games.
 - ttyrec recording during `play` (the plumbing exists in
   `game::process`, just not wired into `game::launch::start_game` yet).
