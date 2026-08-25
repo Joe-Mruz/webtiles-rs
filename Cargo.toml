@@ -36,11 +36,17 @@ clap = { version = "4", features = ["derive"] }
 
 rusqlite = { version = "0.31", features = ["bundled"] }
 
-# Compile-time embedded UI assets (assets/templates, assets/static) - see
-# src/http/assets.rs. Decouples webserver-rs from crawl-ref/source/webserver
-# at runtime; "debug-embed" is off by default so `cargo run` in dev picks up
-# on-disk edits under assets/ without recompiling.
+# Compile-time embedded UI assets (assets/static) - see src/http/assets.rs.
+# Decouples webserver-rs from crawl-ref/source/webserver at runtime;
+# "debug-embed" is off by default so `cargo run` in dev picks up on-disk
+# edits under assets/ without recompiling.
 rust-embed = "8"
+
+# Server-side rendering of our own lobby chrome (replaces the old
+# hand-rolled Tornado-template clone) - ssr-only, no hydrate/csr: nothing
+# ships to the browser, this is purely a typed replacement for string
+# templating. See src/http/ui/.
+leptos = { version = "0.8", default-features = false, features = ["ssr"] }
 
 rand = "0.8"
 flate2 = "1"

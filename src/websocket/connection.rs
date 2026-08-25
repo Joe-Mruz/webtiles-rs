@@ -15,9 +15,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::extract::ws::{Message, WebSocket};
+use leptos::prelude::*;
 use tokio::sync::mpsc;
 
 use crate::game::session::{GameSession, OutgoingMessage, Watcher};
+use crate::http::ui::{ChatLine, GameLinks};
 use crate::protocol::{ClientMessage, FrameCompressor, KnownClientMessage, MessageBatcher, ServerMessage};
 use crate::state::AppState;
 
@@ -395,19 +397,9 @@ async fn chat(conn: &mut Connection, text: &str) {
         text.truncate(max_length.saturating_sub(5));
         text.push_str("[...]");
     }
-    let content = format!(
-        "<span class='chat_sender'>{}</span>: <span class='chat_msg'>{}</span>",
-        html_escape(username),
-        html_escape(&text)
-    );
+    let username = username.clone();
+    let content = view! { <ChatLine sender=username text=text/> }.to_html();
     session.broadcast(ServerMessage::Chat { content, meta: None }).await;
-}
-
-fn html_escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
 }
 
 async fn send_lobby(conn: &mut Connection) {
@@ -421,25 +413,19 @@ async fn send_lobby(conn: &mut Connection) {
 }
 
 /// Send the "Play now:" links (one per configured game), matching
-/// `send_game_links`. Simplified: renders a fixed `<br>`-separated list
-/// directly in Rust rather than through `game_links.html` (whose
-/// `{% for %}`/`{% try %}` constructs are beyond the scope of
-/// `http::templates`' purpose-built engine - see its module doc); also
-/// omits save-slot-info greying-out (NOT YET PORTED).
+/// `send_game_links`. Simplified: also omits save-slot-info greying-out
+/// (NOT YET PORTED).
 async fn send_game_links(conn: &mut Connection) {
     let Some(username) = conn.username.clone() else { return };
-    let mut html = String::from("Play now:");
+    let mut games = Vec::new();
     for id in conn.state.config.games.keys() {
         let Some(resolved) = conn.state.config.resolve_game(id) else { continue };
         let name = resolved.fields.name.clone().unwrap_or_else(|| id.clone());
         let name = resolved.templated(&name, Some(&username)).unwrap_or(name);
-        html.push_str(&format!(
-            r##"<br><a href="#play-{}">{}</a>"##,
-            html_escape(id),
-            html_escape(&name)
-        ));
+        games.push((id.clone(), name));
     }
-    conn.batcher.queue(&ServerMessage::SetGameLinks { content: html }).ok();
+    let content = view! { <GameLinks games=games/> }.to_html();
+    conn.batcher.queue(&ServerMessage::SetGameLinks { content }).ok();
 }
 
 /// Flush any queued messages as one batched, optionally-compressed frame.

@@ -1,15 +1,11 @@
 //! A minimal, purpose-built substitute for Tornado's template engine,
-//! covering exactly the constructs actually used by the WebTiles-derived
-//! templates - not a general-purpose template engine, and not intended to
-//! grow into one; the lobby UI is planned to move to Leptos (see
-//! `MIGRATION.md`), at which point [`render_embedded`] and its templates
-//! go away. Two independent template sources use this same syntax:
-//! - Our own lobby page (`client.html`, `banner.html`, `footer.html`),
-//!   compiled into the binary from `assets/templates/` - see
-//!   [`render_embedded`] and `http/assets.rs`.
-//! - `game.html`, reported per-connected-game-process via `client_path`
-//!   (an external, per-crawl-build directory outside our control, so it
-//!   must stay disk-based) - see [`render_file`] and `game/launch.rs`.
+//! covering exactly the constructs actually used by `game.html`. This is
+//! now the *only* remaining user: our own lobby chrome
+//! (`client.html`/`banner.html`/`footer.html`, formerly under
+//! `assets/templates/`) was ported to Leptos SSR - see `http/ui/`.
+//! `game.html` stays on this engine because it's reported per-connected-
+//! game-process via `client_path` - an external, per-crawl-build directory
+//! outside our control (see `game/launch.rs`) - not something we render.
 //!
 //! Supported syntax:
 //! - `{{ static_url("path") }}` -> `/static/path`
@@ -29,7 +25,6 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::error::{Result, WebtilesError};
-use crate::http::assets::Templates;
 
 #[derive(Debug, Clone, Default)]
 pub struct TemplateContext {
@@ -61,21 +56,6 @@ pub fn render_file(template_dir: &Path, name: &str, ctx: &TemplateContext) -> Re
 
 pub fn render_str(source: &str, template_dir: &Path, ctx: &TemplateContext) -> Result<String> {
     render_with(source, ctx, &|inc| render_file(template_dir, inc, ctx))
-}
-
-/// Render one of our own lobby-page templates, compiled into the binary
-/// via `rust_embed` (`assets/templates/`) - no runtime dependency on
-/// `crawl-ref/source/webserver/templates/`.
-pub fn render_embedded(name: &str, ctx: &TemplateContext) -> Result<String> {
-    let source = load_embedded(name)?;
-    render_with(&source, ctx, &|inc| render_embedded(inc, ctx))
-}
-
-fn load_embedded(name: &str) -> Result<String> {
-    let file = Templates::get(name)
-        .ok_or_else(|| WebtilesError::Internal(format!("embedded template not found: {name}")))?;
-    String::from_utf8(file.data.into_owned())
-        .map_err(|e| WebtilesError::Internal(format!("embedded template {name} is not utf8: {e}")))
 }
 
 fn render_with(source: &str, ctx: &TemplateContext, include: &dyn Fn(&str) -> Result<String>) -> Result<String> {
@@ -358,29 +338,6 @@ mod tests {
         );
         let out = render_str(template, &dir(), &ctx).unwrap();
         assert_eq!(out, "beforeafter");
-    }
-
-    #[test]
-    fn renders_real_banner_template() {
-        // banner.html is bundled in assets/templates/ (embedded via
-        // rust_embed), so this no longer depends on ../webserver.
-        let ctx = TemplateContext::default()
-            .with_bool("username", true)
-            .with_string("username", "alice");
-        let out = render_embedded("banner.html", &ctx).unwrap();
-        assert!(out.contains("Welcome to WebTiles!"));
-        assert!(out.contains("Hello, alice!"));
-    }
-
-    #[test]
-    fn renders_real_client_html_with_banner_include() {
-        let ctx = TemplateContext::default()
-            .with_string("socket_server", "ws://x/socket")
-            .with_string("game_version", "0.34")
-            .with_string("fail_safe_game_version", "0.34");
-        let out = render_embedded("client.html", &ctx).unwrap();
-        assert!(out.contains("Welcome to WebTiles!"));
-        assert!(out.contains(r#"var socket_server = "ws://x/socket";"#));
     }
 }
 

@@ -28,7 +28,7 @@ operate directly on the user/settings databases).
 
 | Method | Path | Handler | Behavior |
 |---|---|---|---|
-| GET | `/` | `MainHandler` | Renders `templates/client.html` with `socket_server` (ws/wss URL), `game_version`, `config`, and password-reset-token state (`?ResetToken=`). No auth required — the lobby itself authenticates over the websocket. |
+| GET | `/` | `MainHandler` | Renders the lobby page with `socket_server` (ws/wss URL), `game_version`, `config`, and password-reset-token state (`?ResetToken=`). No auth required — the lobby itself authenticates over the websocket. |
 | GET/WS | `/socket` | `ws_handler.CrawlWebSocket` | The single WebSocket endpoint. All game/lobby/chat/auth interaction happens here. |
 | GET | `/gamedata/<version-hex>/<path>` | `game_data_handler.GameDataHandler` | Static file serving for game client assets (tiles, JS, sound), namespaced by a per-binary content hash (`version`) so multiple crawl versions/binaries can serve different asset sets concurrently. 404 if `version` is unknown. Honors `game_data_no_cache` config (disables caching headers). |
 | GET | `/status/lobby/` | `status.LobbyHandler` | JSON array of currently running, publicly-visible games (used by external dashboards). No auth. |
@@ -47,14 +47,22 @@ Rust equivalent: Axum router in `http/mod.rs`, handlers in `http/handlers.rs`.
 file directly (see `http/game_data.rs`) — this is inherently disk-based,
 since it points at whatever directory an external `crawl` binary reports.
 
-Our own lobby page's `client.html`/`banner.html`/`footer.html` and
-`/static/*` assets are **not** read from `crawl-ref/source/webserver/` at
-all: they're compiled into the `webtiles-rs` binary from
-`webserver-rs/assets/` via `rust_embed` (see `http/assets.rs`), so the
-Rust server has no runtime or build-time dependency on the Python
-implementation's directory. This is a stopgap; the lobby UI is planned to
-be rewritten in Leptos (see `MIGRATION.md`), which will replace this
-template-substitution approach entirely.
+Our own lobby page is **not** read from `crawl-ref/source/webserver/` at
+all: it's rendered server-side by typed Leptos components (SSR only, no
+hydration/WASM shipped to the browser - see `http/ui/`), and `/static/*`
+assets are compiled into the `webtiles-rs` binary from `webserver-rs/assets/`
+via `rust_embed` (see `http/assets.rs`). So the Rust server has no runtime
+or build-time dependency on the Python implementation's directory.
+
+`assets/static/scripts/{comm,client,chat,key_conversion,app,linkify}.js`
+and `scripts/contrib/*` are deliberately **not** part of that Leptos
+migration and must not change behaviorally: the external, per-crawl-version
+`game.html`/`game_data/static/game.js` (reported via `client_path`, see
+§4.2 and `game/launch.rs`) requires these exact AMD modules/APIs (e.g.
+`game.js` does `define(["jquery","exports","comm","client",
+"key_conversion",...])` and reaches into their exports directly). The
+Leptos-rendered markup reproduces every DOM id/class those scripts select
+on.
 
 ## 3. WebSocket lifecycle (`webtiles/ws_handler.py: CrawlWebSocket`)
 

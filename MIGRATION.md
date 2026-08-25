@@ -44,8 +44,16 @@ binary):
   driving the client's Play button(s).
 - HTTP endpoints: `/`, `/status/version/`, `/status/lobby/`,
   `/gamedata/<version>/<path>`, static asset serving.
-- A minimal, purpose-built template renderer covering the actual Tornado
-  template syntax used by `client.html`/`banner.html`/`footer.html`.
+- The lobby chrome (login/register/password dialogs, banner, admin panel,
+  lobby list) is rendered server-side by typed Leptos components (SSR
+  only - no hydration/WASM shipped to the browser; see `src/http/ui/`),
+  replacing the old purpose-built Tornado-template clone. A minimal,
+  purpose-built template renderer (`src/http/templates.rs`) remains, but
+  only for `game.html`, which is reported per-crawl-version via
+  `client_path` and stays disk-based/external - see `ARCHITECTURE.md` §2.
+  `assets/static/scripts/{comm,client,chat,key_conversion,app,linkify}.js`
+  and `scripts/contrib/*` are untouched by design: the external
+  `game_data/static/game.js` depends on their exact AMD module API.
 - **HTTPS/WSS**, via `axum-server` + `rustls` (no OpenSSL/native-tls
   dependency), reading the same `ssl_cert_file`/`ssl_key_file`/
   `ssl_address`/`ssl_port`/`ssl_bind_pairs` config as Python. Plain HTTP

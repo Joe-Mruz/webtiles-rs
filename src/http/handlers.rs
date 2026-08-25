@@ -7,12 +7,14 @@ use axum::extract::{Query, State};
 use axum::http::HeaderMap;
 use axum::response::{Html, IntoResponse, Json};
 
-use crate::http::templates::{render_embedded, TemplateContext};
+use leptos::prelude::*;
+
+use crate::http::ui::LobbyPage;
 use crate::state::AppState;
 
-/// `GET /`: renders `client.html`. See `../../ARCHITECTURE.md` §2 and
-/// `http/templates.rs` for the (purpose-built, non-Tornado) template
-/// engine backing this.
+/// `GET /`: renders the lobby page. See `../../ARCHITECTURE.md` §2 and
+/// `http/ui/` (Leptos SSR, no hydration - see its module docs) for what
+/// backs this.
 pub async fn main_page(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -30,36 +32,28 @@ pub async fn main_page(
         .unwrap_or("localhost");
     let socket_server = format!("{protocol}{host}/socket");
 
-    let mut ctx = TemplateContext::default()
-        .with_string("socket_server", socket_server)
-        .with_string("game_version", env!("CARGO_PKG_VERSION"))
-        // Python's template aliases `game_version` to this name via
-        // `{% set fail_safe_game_version = globals().get('game_version', '') %}`;
-        // our template engine strips `{% set %}` as a no-op, so the alias
-        // is provided directly instead.
-        .with_string("fail_safe_game_version", env!("CARGO_PKG_VERSION"))
-        .with_bool("allow_password_reset", state.config.allow_password_reset)
-        .with_bool("admin_password_reset", state.config.admin_password_reset);
+    // NOT YET PORTED: full recovery-token lookup/expiry semantics
+    // (userdb.rs does not yet implement the `recovery_tokens` table
+    // queries `userdb.find_recovery_token` performs); this currently
+    // always treats a present token as valid.
+    let reset_token = params.get("ResetToken").cloned();
 
-    if let Some(token) = params.get("ResetToken") {
-        // NOT YET PORTED: full recovery-token lookup/expiry semantics
-        // (userdb.rs does not yet implement the `recovery_tokens` table
-        // queries `userdb.find_recovery_token` performs); this currently
-        // always treats a present token as valid.
-        ctx = ctx.with_bool("reset_token", true).with_string("reset_token", token);
-    }
+    let allow_password_reset = state.config.allow_password_reset;
+    let admin_password_reset = state.config.admin_password_reset;
+    let game_version = env!("CARGO_PKG_VERSION").to_string();
 
-    match render_embedded("client.html", &ctx) {
-        Ok(html) => Html(html).into_response(),
-        Err(e) => {
-            tracing::error!(error = %e, "failed to render client.html");
-            (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "template rendering error",
-            )
-                .into_response()
-        }
+    let html = view! {
+        <LobbyPage
+            socket_server=socket_server
+            game_version=game_version
+            allow_password_reset=allow_password_reset
+            admin_password_reset=admin_password_reset
+            reset_token=reset_token
+            reset_token_error=None
+        />
     }
+    .to_html();
+    Html(format!("<!DOCTYPE HTML>\n{html}")).into_response()
 }
 
 /// `GET /status/version/`, matching `status.VersionHandler`. Field names

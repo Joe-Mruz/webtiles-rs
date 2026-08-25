@@ -6,6 +6,7 @@ pub mod assets;
 pub mod game_data;
 pub mod handlers;
 pub mod templates;
+pub mod ui;
 
 use axum::routing::get;
 use axum::Router;
